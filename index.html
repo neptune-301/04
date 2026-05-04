@@ -167,22 +167,21 @@
 
         /* 모바일 최적화 (반응형 768px 이하) */
         @media (max-width: 768px) {
-            .container { grid-template-columns: 1fr; } /* 1단 레이아웃으로 변경 */
+            .container { grid-template-columns: 1fr; } 
             .header-panel { flex-direction: column; align-items: flex-start; }
             .btn-group { width: 100%; display: grid; grid-template-columns: 1fr 1fr; }
             .btn-group button { width: 100%; font-size: 0.85em; padding: 8px; }
-            .log-panel { height: 300px; } /* 모바일에서 로그창 높이 축소 */
+            .log-panel { height: 300px; } 
             .right-column { gap: 15px; }
-            .char-grid { grid-template-columns: 1fr; } /* 모바일에서 캐릭터 카드를 세로로 한 줄씩 배치 */
+            .char-grid { grid-template-columns: 1fr; } 
             .modal-content { padding: 15px; }
-            .skill-table { font-size: 0.75em; } /* 모바일에서 표 글씨 축소 */
+            .skill-table { font-size: 0.75em; } 
         }
     </style>
 </head>
 <body>
 
 <div class="container">
-    <!-- 헤더 -->
     <div class="panel header-panel">
         <div>
             <h1>[A-SYNC ALPHA]</h1>
@@ -198,33 +197,27 @@
         </div>
     </div>
 
-    <!-- 로그창 -->
     <div class="panel log-panel" id="log-window"></div>
 
-    <!-- 우측 구역 -->
     <div class="right-column">
-        <!-- 상황판 -->
         <div class="panel action-panel">
             <h3 style="margin-top:0; border-bottom:1px solid; padding-bottom:10px;">상황판 (ACTION)</h3>
             <p id="current-phase-desc" style="color: var(--accent-blue); font-weight:bold;">시스템 부팅 및 데이터 연동 대기 중...</p>
             <div id="action-controls"></div>
         </div>
         
-        <!-- 인벤토리 -->
         <div class="panel inventory-panel">
             <h3 style="margin-top:0; border-bottom:1px solid var(--accent-blue); color:var(--accent-blue); padding-bottom:10px;">[INVENTORY] 보급품</h3>
             <div id="inventory-container"></div>
         </div>
     </div>
 
-    <!-- 부대 상황 -->
     <div class="panel roster-panel">
         <h3>요원 스테이터스 목록</h3>
         <div class="char-grid" id="char-list"></div>
     </div>
 </div>
 
-<!-- 튜토리얼 모달 -->
 <div class="modal-overlay" id="tutorial-modal">
     <div class="modal-content">
         <h2>A-Sync Alpha : 생존 가이드</h2>
@@ -260,7 +253,6 @@
                 <tr><td>맹독의 정수</td><td>보강</td><td>아군 2명 지정. 각 아군은 원하는 스탯 1개를 선택해 그 날 하루 동안 +1 상승(각성).</td></tr>
             </tbody>
         </table>
-
         <button class="modal-close-btn" onclick="toggleTutorial()">확인 (닫기)</button>
     </div>
 </div>
@@ -276,18 +268,13 @@
         logWindow.scrollTop = logWindow.scrollHeight;
     }
 
-    function clearLog() {
-        document.getElementById('log-window').innerHTML = '';
-    }
-
+    function clearLog() { document.getElementById('log-window').innerHTML = ''; }
     function toggleTheme() { document.body.classList.toggle('light-mode'); }
-    
     function toggleTutorial() {
         const modal = document.getElementById('tutorial-modal');
         modal.style.display = modal.style.display === 'flex' ? 'none' : 'flex';
     }
 
-    // 전체 초기화 함수
     function resetGame() {
         if(confirm("모든 진행 상황을 초기화하고 게임을 처음부터 다시 시작하시겠습니까?")) {
             location.reload();
@@ -298,7 +285,7 @@
         day: 1, phase: 'standby',
         fortress: { hp: 50, maxHp: 50 },
         chars: [], enemiesDB: [], skillsDB: [],
-        activeEnemies: [], combatTurnQueue: [],
+        activeEnemies: [], combatTurnQueue: [], enemyIdCounter: 1,
         exploreSpots: 10, currentExploreTarget: 0, meteorDashSpots: 0,
         inventory: { "붕대": 0, "피로 회복제": 0, "구급 상자": 0, "비타민": 0, "전문 응급 처치 키트": 0, "전문 피로 회복 키트": 0 }
     };
@@ -331,7 +318,7 @@
                     stats: { atk: parseInt(d['공격']), def: parseInt(d['방어']), ctrl: parseInt(d['제어']), luck: parseInt(d['행운']) },
                     skill: d['스킬'],
                     spec: d['특화'] === '전투' ? 'combat' : (d['특화'] === '탐색' ? 'explore' : 'fortify'),
-                    mission: null,
+                    mission: 'standby',
                     buffs: { autoExplore: 0, exploreBonus: false, barrier: 0, awakening: null }
                 }));
                 dataLoaded = true;
@@ -342,17 +329,10 @@
                 const enemyData = parseCSV(await enemyRes.text());
                 state.enemiesDB = enemyData.map(d => ({
                     name: d['이름'], hp: parseInt(d['체력']), maxHp: parseInt(d['체력']),
-                    stats: { atk: parseInt(d['공격']), def: parseInt(d['방어']), luck: parseInt(d['행운']) },
-                    status: { stun: 0, burn: 0 }
+                    stats: { atk: parseInt(d['공격']), def: parseInt(d['방어']), luck: parseInt(d['행운']) }
                 }));
             }
-
-            const skillRes = await fetch('스킬.csv');
-            if (skillRes.ok) state.skillsDB = parseCSV(await skillRes.text());
-
-        } catch (e) {
-            logMsg("[ERR] CSV 파일을 찾을 수 없습니다. 깃허브 연동을 확인하세요.", 'atk');
-        }
+        } catch (e) { logMsg("[ERR] CSV 파일을 찾을 수 없습니다. 깃허브 연동을 확인하세요.", 'atk'); }
 
         if (dataLoaded) {
             toggleTutorial(); 
@@ -455,6 +435,13 @@
         state.phase = phase;
         const panel = document.getElementById('action-controls');
         const desc = document.getElementById('current-phase-desc');
+        
+        // 하루 시작 시, 생존한 모든 캐릭터를 '대기' 상태로 리셋
+        if (phase === 'assign') {
+            state.chars.forEach(c => {
+                if(c.hp > 0) c.mission = 'standby';
+            });
+        }
         updateUI();
 
         if (phase === 'assign') {
@@ -464,7 +451,6 @@
             let html = `<div class="action-box">`;
             state.chars.forEach((c, idx) => {
                 if(c.hp > 0) {
-                    c.mission = 'combat'; 
                     html += `<label>${c.name} 배정:</label><select id="assign-${idx}">
                             <option value="combat">전투 임무</option><option value="explore">탐색 임무</option><option value="fortify">보강 임무</option></select>`;
                 }
@@ -475,10 +461,12 @@
         else if (phase === 'combat') {
             desc.innerText = `[전투 페이즈] 시스템 전투 모드 가동`;
             if(state.enemiesDB.length >= 1) {
-                state.activeEnemies = [
-                    JSON.parse(JSON.stringify(state.enemiesDB[Math.floor(Math.random() * state.enemiesDB.length)])),
-                    JSON.parse(JSON.stringify(state.enemiesDB[Math.floor(Math.random() * state.enemiesDB.length)]))
-                ];
+                // 적 복제 및 고유 ID 부여 (동일한 적 구분을 위함)
+                let e1 = JSON.parse(JSON.stringify(state.enemiesDB[Math.floor(Math.random() * state.enemiesDB.length)]));
+                let e2 = JSON.parse(JSON.stringify(state.enemiesDB[Math.floor(Math.random() * state.enemiesDB.length)]));
+                e1.id = state.enemyIdCounter++; e1.status = { stun: 0, burn: 0 };
+                e2.id = state.enemyIdCounter++; e2.status = { stun: 0, burn: 0 };
+                state.activeEnemies = [e1, e2];
                 logMsg(`게이트 오픈. 에너미 ${state.activeEnemies.length}체 출현!`, 'atk');
             }
             
@@ -505,7 +493,10 @@
 
     function confirmAssignments() {
         state.chars.forEach((c, idx) => {
-            if(c.hp > 0) c.mission = document.getElementById(`assign-${idx}`).value;
+            if(c.hp > 0) {
+                let sel = document.getElementById(`assign-${idx}`);
+                if(sel) c.mission = sel.value;
+            }
         });
         startPhase('combat');
     }
@@ -531,7 +522,8 @@
 
         if (entity.type === 'char') {
             let targetHtml = `<select id="combat-target">`;
-            aliveEnemies.forEach(e => { targetHtml += `<option value="${e.name}">${e.name} (HP: ${e.hp})</option>`; });
+            // ID를 value로 사용하여 중복 에너미 완벽 구분
+            aliveEnemies.forEach(e => { targetHtml += `<option value="${e.id}">${e.name} (HP: ${e.hp})</option>`; });
             targetHtml += `</select>`;
 
             let skillDisabled = entity.ref.spec !== 'combat' ? 'disabled' : '';
@@ -549,9 +541,10 @@
                 </div>
             `;
         } else {
+            let stunDesc = entity.ref.status.stun > 0 ? `(기절 중 - 잔여 ${entity.ref.status.stun}턴)` : '';
             panel.innerHTML = `
                 <div class="action-box" style="border-color:var(--accent-red);">
-                    <p style="color:var(--accent-red); margin-top:0;"><strong>[▶ 적성개체 ${entity.ref.name}의 턴]</strong></p>
+                    <p style="color:var(--accent-red); margin-top:0;"><strong>[▶ 적성개체 ${entity.ref.name}의 턴] ${stunDesc}</strong></p>
                     <button onclick="enemyAutoAction()" style="width:100%; border-color:var(--accent-red)">적 행동 시뮬레이션</button>
                 </div>
             `;
@@ -566,7 +559,8 @@
             return; 
         }
 
-        let target = state.activeEnemies.find(e => e.name === document.getElementById('combat-target').value);
+        let targetId = parseInt(document.getElementById('combat-target').value);
+        let target = state.activeEnemies.find(e => e.id === targetId);
 
         if (actionType === 'attack') {
             let atkRoll = roll(6) + getStat(char, 'atk');
@@ -592,10 +586,17 @@
     function enemyAutoAction() {
         let enemy = state.combatTurnQueue[0].ref;
         
-        if (enemy.status.stun > 0) {
+        // 화상 처리 (턴 시작/기절 상관없이 먼저 대미지 입음)
+        if (enemy.status.burn > 0) {
+            enemy.hp -= 1; enemy.status.burn--;
+            logMsg(`[상태이상] ${enemy.name} 화상 대미지 1 발생. (잔여: ${enemy.status.burn}턴)`, 'atk');
+        }
+
+        // 기절 시 턴 패스 (체력이 남아있을 때만)
+        if (enemy.hp > 0 && enemy.status.stun > 0) {
             logMsg(`[상태이상] ${enemy.name} 기절 상태! 행동 불가. (잔여: ${enemy.status.stun}턴)`, 'heal');
             enemy.status.stun--;
-        } else {
+        } else if (enemy.hp > 0) {
             let aliveChars = state.chars.filter(c => c.hp > 0 && c.mission === 'combat');
             let targetChar = aliveChars.length > 0 ? aliveChars[Math.floor(Math.random() * aliveChars.length)] : null;
 
@@ -616,11 +617,6 @@
                 let dmg = roll(6); state.fortress.hp -= dmg;
                 logMsg(`[적 요새 공격] ${enemy.name} -> 요새에 ${dmg} 피해!`, 'atk');
             }
-        }
-        
-        if (enemy.status.burn > 0) {
-            enemy.hp -= 1; enemy.status.burn--;
-            logMsg(`[상태이상] ${enemy.name} 화상 대미지 1 발생. (잔여: ${enemy.status.burn}턴)`, 'atk');
         }
 
         state.combatTurnQueue.push(state.combatTurnQueue.shift());
@@ -765,7 +761,8 @@
         let html = `<div class="action-box" style="border-color:var(--accent-yellow);"><h4 style="margin:0 0 10px 0; color:var(--accent-yellow);">스킬 타겟: [${char.skill}]</h4>`;
         
         let allyOpts = ""; state.chars.forEach(c => allyOpts += `<option value="${c.name}">${c.name}</option>`);
-        let enemyOpts = ""; state.activeEnemies.filter(e => e.hp > 0).forEach(e => enemyOpts += `<option value="${e.name}">${e.name} (HP:${e.hp})</option>`);
+        // 적 타겟팅 시 ID를 밸류로 지정
+        let enemyOpts = ""; state.activeEnemies.filter(e => e.hp > 0).forEach(e => enemyOpts += `<option value="${e.id}">${e.name} (HP:${e.hp})</option>`);
         let statOpts = `<option value="atk">공격</option><option value="def">방어</option><option value="ctrl">제어</option><option value="luck">행운</option>`;
 
         if (char.skill === '정화의 파도') {
@@ -836,7 +833,8 @@
 
         let ally1 = t1 ? state.chars.find(c => c.name === t1) : null;
         let ally2 = t2 ? state.chars.find(c => c.name === t2) : null;
-        let enemy1 = t1 ? state.activeEnemies.find(e => e.name === t1) : null;
+        // 적 타겟팅은 ID(정수형)로 찾음
+        let enemy1 = t1 ? state.activeEnemies.find(e => e.id === parseInt(t1)) : null;
 
         switch(char.skill) {
             case '오버차지 필드':
