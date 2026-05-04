@@ -51,7 +51,7 @@
             width: 100%;
             max-width: 1200px;
             display: grid;
-            grid-template-columns: 3fr 2fr; /* 로그창 60%, 상황판 40% */
+            grid-template-columns: 3fr 2fr; /* 로그창 60%, 상황판+인벤 40% */
             gap: 20px;
         }
 
@@ -74,9 +74,9 @@
         .header-panel h1 { margin: 0; text-shadow: 0 0 5px var(--text-main); }
         .sys-info { font-weight: bold; font-size: 1.1em; color: var(--accent-blue); }
 
-        /* 로그창을 위로 배치 */
+        /* 로그창 */
         .log-panel {
-            height: 350px;
+            height: 450px;
             overflow-y: auto;
             background-color: #000;
             padding: 15px;
@@ -92,11 +92,8 @@
         .log-atk { color: var(--accent-red); font-weight: bold; }
         .log-heal { color: var(--accent-blue); }
 
-        /* 상황판 */
-        .action-panel {
-            display: flex;
-            flex-direction: column;
-        }
+        /* 우측 패널 그룹 (상황판 + 인벤토리) */
+        .right-column { display: flex; flex-direction: column; gap: 20px; }
 
         button, select {
             background-color: var(--btn-bg);
@@ -116,34 +113,18 @@
         button:disabled { opacity: 0.4; cursor: not-allowed; box-shadow: none; }
         select { margin-bottom: 10px; width: 100%; }
 
-        /* 부대 상황 (하단) */
-        .roster-panel {
-            grid-column: 1 / -1;
-        }
-        
-        .char-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-            gap: 15px;
-        }
-
+        /* 부대 상황 */
+        .roster-panel { grid-column: 1 / -1; }
+        .char-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 15px; }
         .char-card {
-            border: 1px solid var(--border-color);
-            padding: 15px;
-            border-radius: 6px;
-            background-color: rgba(0, 0, 0, 0.3);
-            position: relative;
+            border: 1px solid var(--border-color); padding: 15px; border-radius: 6px;
+            background-color: rgba(0, 0, 0, 0.3); position: relative;
         }
         .char-card h4 { margin: 0 0 10px 0; color: var(--accent-blue); border-bottom: 1px dashed var(--border-color); padding-bottom: 5px; }
-
         .bar-container { width: 100%; background-color: #222; height: 12px; border-radius: 6px; margin: 5px 0; border: 1px solid #444; }
         .bar-hp { background-color: var(--accent-red); height: 100%; border-radius: 5px; transition: width 0.3s; box-shadow: 0 0 5px var(--accent-red); }
         .bar-sp { background-color: var(--accent-blue); height: 100%; border-radius: 5px; transition: width 0.3s; box-shadow: 0 0 5px var(--accent-blue); }
-        
-        .mission-badge {
-            position: absolute; top: 10px; right: 10px;
-            font-size: 0.8em; padding: 2px 6px; border: 1px solid; border-radius: 3px;
-        }
+        .mission-badge { position: absolute; top: 10px; right: 10px; font-size: 0.8em; padding: 2px 6px; border: 1px solid; border-radius: 3px; }
 
         .controls-row { display: flex; gap: 10px; margin-bottom: 15px; flex-wrap: wrap; }
         .action-box { border: 1px dashed var(--border-color); padding: 15px; border-radius: 5px; margin-top: 15px; }
@@ -166,19 +147,26 @@
         </div>
     </div>
 
-    <!-- 로그창 (상단 좌측) -->
+    <!-- 로그창 -->
     <div class="panel log-panel" id="log-window"></div>
 
-    <!-- 상황판 / 액션 (상단 우측) -->
-    <div class="panel action-panel">
-        <h3 style="margin-top:0; border-bottom:1px solid; padding-bottom:10px;">SYSTEM OVERRIDE / 상황판</h3>
-        <p id="current-phase-desc" style="color: var(--accent-blue); font-weight:bold;">시스템 부팅 및 데이터 연동 대기 중...</p>
-        <div id="action-controls">
-            <!-- 동적 버튼 생성 영역 -->
+    <!-- 우측 구역 -->
+    <div class="right-column">
+        <!-- 상황판 -->
+        <div class="panel action-panel">
+            <h3 style="margin-top:0; border-bottom:1px solid; padding-bottom:10px;">SYSTEM OVERRIDE / 상황판</h3>
+            <p id="current-phase-desc" style="color: var(--accent-blue); font-weight:bold;">시스템 부팅 및 데이터 연동 대기 중...</p>
+            <div id="action-controls"></div>
+        </div>
+        
+        <!-- 인벤토리 -->
+        <div class="panel inventory-panel">
+            <h3 style="margin-top:0; border-bottom:1px solid var(--accent-blue); color:var(--accent-blue); padding-bottom:10px;">[INVENTORY] 보급품</h3>
+            <div id="inventory-container"></div>
         </div>
     </div>
 
-    <!-- 부대 상황 (하단) -->
+    <!-- 부대 상황 -->
     <div class="panel roster-panel">
         <h3>요원 스테이터스 목록</h3>
         <div class="char-grid" id="char-list"></div>
@@ -196,24 +184,18 @@
         logWindow.scrollTop = logWindow.scrollHeight;
     }
 
-    function toggleTheme() {
-        document.body.classList.toggle('light-mode');
-    }
+    function toggleTheme() { document.body.classList.toggle('light-mode'); }
 
-    // 게임 상태 변수
+    // 게임 코어 스테이트
     let state = {
-        day: 1,
-        phase: 'standby', // standby, assign, combat, explore, fortify
+        day: 1, phase: 'standby',
         fortress: { hp: 50, maxHp: 50 },
-        chars: [],
-        enemiesDB: [],
-        skillsDB: [],
-        activeEnemies: [],
-        combatTurnQueue: [],
-        exploreSpots: 10
+        chars: [], enemiesDB: [], skillsDB: [],
+        activeEnemies: [], combatTurnQueue: [],
+        exploreSpots: 10, currentExploreTarget: 0, meteorDashSpots: 0,
+        inventory: { "붕대": 0, "피로 회복제": 0, "구급 상자": 0, "비타민": 0, "전문 응급 처치 키트": 0, "전문 피로 회복 키트": 0 }
     };
 
-    // CSV 파서 (BOM 제거 완벽 적용)
     function parseCSV(text) {
         const cleanText = text.replace(/^\uFEFF/, '');
         const lines = cleanText.trim().split(/\r?\n/);
@@ -227,12 +209,12 @@
         }).filter(item => item !== null);
     }
 
-    // 데이터 연동
     async function fetchCSVData() {
-        logMsg("깃허브에서 기밀 데이터(CSV) 연동을 시도합니다...", "sys");
+        logMsg("데이터베이스 연동을 시도합니다...", "sys");
         let dataLoaded = false;
         
         try {
+            // 파일명 수정 완료!
             const charRes = await fetch('캐릭터.csv');
             if (charRes.ok) {
                 const charData = parseCSV(await charRes.text());
@@ -243,7 +225,8 @@
                     stats: { atk: parseInt(d['공격']), def: parseInt(d['방어']), ctrl: parseInt(d['제어']), luck: parseInt(d['행운']) },
                     skill: d['스킬'],
                     spec: d['특화'] === '전투' ? 'combat' : (d['특화'] === '탐색' ? 'explore' : 'fortify'),
-                    mission: null // 임무 배정용
+                    mission: null,
+                    buffs: { autoExplore: 0, exploreBonus: false, barrier: 0, awakening: null }
                 }));
                 logMsg("요원 데이터 로드 완료.", 'heal');
                 dataLoaded = true;
@@ -254,29 +237,38 @@
                 const enemyData = parseCSV(await enemyRes.text());
                 state.enemiesDB = enemyData.map(d => ({
                     name: d['이름'], hp: parseInt(d['체력']), maxHp: parseInt(d['체력']),
-                    stats: { atk: parseInt(d['공격']), def: parseInt(d['방어']), luck: parseInt(d['행운']) }
+                    stats: { atk: parseInt(d['공격']), def: parseInt(d['방어']), luck: parseInt(d['행운']) },
+                    status: { stun: 0, burn: 0 }
                 }));
                 logMsg("적성 개체 데이터 로드 완료.", 'heal');
             }
 
+            // 파일명 수정 완료!
             const skillRes = await fetch('스킬.csv');
             if (skillRes.ok) {
                 state.skillsDB = parseCSV(await skillRes.text());
-                logMsg("이능력(스킬) 데이터 로드 완료.", 'heal');
+                logMsg("이능력 데이터 로드 완료.", 'heal');
             }
         } catch (e) {
-            logMsg("[ERR] CSV 파일을 찾을 수 없습니다. (깃허브 연동 확인 요망)", 'atk');
+            logMsg("[ERR] CSV 파일을 찾을 수 없습니다. 깃허브 연동을 확인하세요.", 'atk');
         }
 
         if (dataLoaded) {
-            logMsg("시스템 부팅 성공. 일과를 시작할 수 있습니다.");
+            renderInventory();
             startPhase('assign');
         }
     }
 
     window.onload = fetchCSVData;
 
-    // UI 업데이트 (스테이터스 보드)
+    // 실시간 버프 포함 스탯 계산기
+    function getStat(char, statName) {
+        let val = char.stats[statName];
+        if (char.buffs && char.buffs.awakening === statName) val += 1;
+        return val;
+    }
+
+    // UI & 인벤토리 렌더링
     function updateUI() {
         document.getElementById('day-counter').innerText = state.day;
         document.getElementById('fortress-hp').innerText = state.fortress.hp;
@@ -286,15 +278,14 @@
         state.chars.forEach((c) => {
             const hpPct = Math.max(0, (c.hp / c.maxHp) * 100);
             const spPct = Math.max(0, (c.sp / c.maxSp) * 100);
-            let missionStr = c.mission === 'combat' ? '전투' : (c.mission === 'explore' ? '탐색' : (c.mission === 'fortify' ? '보강' : '대기'));
-            let specStr = c.spec === 'combat' ? '전투' : (c.spec === 'explore' ? '탐색' : '보강');
+            let mStr = c.mission === 'combat' ? '전투' : (c.mission === 'explore' ? '탐색' : (c.mission === 'fortify' ? '보강' : (c.mission === 'escaped' ? '전투이탈' : '대기')));
             
             roster.innerHTML += `
-                <div class="char-card">
-                    <span class="mission-badge" style="color:var(--accent-blue); border-color:var(--accent-blue)">현 임무: ${missionStr}</span>
+                <div class="char-card" style="${c.hp<=0?'opacity:0.5':''}">
+                    <span class="mission-badge" style="color:var(--accent-blue); border-color:var(--accent-blue)">현 임무: ${mStr}</span>
                     <h4>${c.name}</h4>
-                    <p style="font-size:0.85em; margin:5px 0;">특화: ${specStr} | 스킬: <span style="color:#ffeb3b">${c.skill}</span></p>
-                    <p style="font-size:0.85em; margin:5px 0;">[공:${c.stats.atk} 방:${c.stats.def} 제:${c.stats.ctrl} 행:${c.stats.luck}]</p>
+                    <p style="font-size:0.85em; margin:5px 0;">특화: ${c.spec} | 스킬: <span style="color:#ffeb3b">${c.skill}</span></p>
+                    <p style="font-size:0.85em; margin:5px 0;">[공:${getStat(c,'atk')} 방:${getStat(c,'def')} 제:${getStat(c,'ctrl')} 행:${getStat(c,'luck')}]</p>
                     <div class="bar-container"><div class="bar-hp" style="width: ${hpPct}%"></div></div>
                     <small>HP: ${c.hp}/${c.maxHp}</small>
                     <div class="bar-container"><div class="bar-sp" style="width: ${spPct}%"></div></div>
@@ -302,9 +293,50 @@
                 </div>
             `;
         });
+        renderInventory();
     }
 
-    // --- 게임 페이즈 및 시스템 로직 ---
+    function renderInventory() {
+        let html = `<div style="display:flex; flex-wrap:wrap; gap:5px;">`;
+        let hasItem = false;
+        for(let item in state.inventory) {
+            if(state.inventory[item] > 0) {
+                hasItem = true;
+                html += `<button onclick="prepareUseItem('${item}')" style="font-size:0.85em; padding:5px 10px;">${item} (${state.inventory[item]})</button>`;
+            }
+        }
+        html += `</div>`;
+        if(!hasItem) html = `<p style="color:var(--text-dim); font-size:0.9em; margin:0;">보급품이 존재하지 않습니다.</p>`;
+        html += `<div id="item-target-div" style="margin-top:15px; display:none;"></div>`;
+        document.getElementById('inventory-container').innerHTML = html;
+    }
+
+    function prepareUseItem(itemName) {
+        let div = document.getElementById('item-target-div');
+        div.style.display = 'block';
+        let html = `<label>${itemName} 투여:</label><select id="item-target-char" style="width:auto; margin:0 10px; padding:5px;">`;
+        state.chars.filter(c => c.hp > 0).forEach(c => html += `<option value="${c.name}">${c.name}</option>`);
+        html += `</select><button onclick="useItem('${itemName}')" style="background:var(--accent-blue); color:#000; padding:5px 15px;">사용</button>`;
+        div.innerHTML = html;
+    }
+
+    function useItem(itemName) {
+        if (state.inventory[itemName] <= 0) return;
+        let targetName = document.getElementById('item-target-char').value;
+        let char = state.chars.find(c => c.name === targetName);
+        state.inventory[itemName]--;
+        
+        let heal = 0;
+        if(itemName === '붕대') { heal = roll(4); char.hp = Math.min(char.maxHp, char.hp + heal); logMsg(`[아이템] ${char.name} 붕대 사용: 체력 ${heal} 회복`, 'heal'); }
+        else if(itemName === '피로 회복제') { heal = roll(4); char.sp = Math.min(char.maxSp, char.sp + heal); logMsg(`[아이템] ${char.name} 피로 회복제 사용: 기력 ${heal} 회복`, 'heal'); }
+        else if(itemName === '구급 상자') { heal = roll(4) + 2; char.hp = Math.min(char.maxHp, char.hp + heal); logMsg(`[아이템] ${char.name} 구급 상자 사용: 체력 ${heal} 회복`, 'heal'); }
+        else if(itemName === '비타민') { heal = roll(4) + 2; char.sp = Math.min(char.maxSp, char.sp + heal); logMsg(`[아이템] ${char.name} 비타민 사용: 기력 ${heal} 회복`, 'heal'); }
+        else if(itemName === '전문 응급 처치 키트') { heal = roll(6) + 2; char.hp = Math.min(char.maxHp, char.hp + heal); logMsg(`[아이템] ${char.name} 전문 응급 처치 키트 사용: 체력 ${heal} 회복`, 'heal'); }
+        else if(itemName === '전문 피로 회복 키트') { heal = roll(6) + 2; char.sp = Math.min(char.maxSp, char.sp + heal); logMsg(`[아이템] ${char.name} 전문 피로 회복 키트 사용: 기력 ${heal} 회복`, 'heal'); }
+        updateUI();
+    }
+
+    // --- 게임 진행 페이즈 ---
     function startPhase(phase) {
         state.phase = phase;
         const panel = document.getElementById('action-controls');
@@ -314,18 +346,12 @@
         if (phase === 'assign') {
             desc.innerText = `[DAY ${state.day}] 요원 임무 수동 배정`;
             logMsg(`\n========== DAY ${state.day} 시작 ==========`);
-            
             let html = `<div class="action-box">`;
             state.chars.forEach((c, idx) => {
                 if(c.hp > 0) {
-                    html += `
-                        <label>${c.name} 배정:</label>
-                        <select id="assign-${idx}">
-                            <option value="combat">전투 임무</option>
-                            <option value="explore">탐색 임무</option>
-                            <option value="fortify">보강 임무</option>
-                        </select>
-                    `;
+                    c.mission = 'combat'; // Default
+                    html += `<label>${c.name} 배정:</label><select id="assign-${idx}">
+                            <option value="combat">전투 임무</option><option value="explore">탐색 임무</option><option value="fortify">보강 임무</option></select>`;
                 }
             });
             html += `<button onclick="confirmAssignments()" style="width:100%; border-color:var(--accent-blue); color:var(--accent-blue);">배정 완료 및 전투 진입</button></div>`;
@@ -341,23 +367,17 @@
                 logMsg(`게이트 오픈. 에너미 ${state.activeEnemies.length}체 출현!`, 'atk');
             }
             
-            // 전투 순서(행운) 큐 생성
             let queue = [];
-            state.chars.filter(c => c.hp > 0 && c.mission === 'combat').forEach(c => {
-                queue.push({type: 'char', ref: c, init: roll(6) + c.stats.luck});
-            });
-            state.activeEnemies.forEach(e => {
-                queue.push({type: 'enemy', ref: e, init: roll(6) + e.stats.luck});
-            });
+            state.chars.filter(c => c.hp > 0 && c.mission === 'combat').forEach(c => queue.push({type: 'char', ref: c, init: roll(6) + getStat(c,'luck')}));
+            state.activeEnemies.forEach(e => queue.push({type: 'enemy', ref: e, init: roll(6) + e.stats.luck}));
             queue.sort((a, b) => b.init - a.init);
             state.combatTurnQueue = queue;
-
             renderCombatTurn();
         }
         else if (phase === 'explore') {
             state.exploreSpots = 10;
-            desc.innerText = `[탐색 페이즈] 잔여 스팟: ${state.exploreSpots}`;
             logMsg(`\n탐색 임무를 시작합니다.`);
+            generateExploreTarget();
             renderExploreUI();
         }
         else if (phase === 'fortify') {
@@ -368,139 +388,143 @@
         }
     }
 
-    // 1. 배정 완료 처리
     function confirmAssignments() {
-        let combatCount = 0;
         state.chars.forEach((c, idx) => {
-            if(c.hp > 0) {
-                const sel = document.getElementById(`assign-${idx}`);
-                c.mission = sel.value;
-                if(c.mission === 'combat') combatCount++;
-            }
+            if(c.hp > 0) c.mission = document.getElementById(`assign-${idx}`).value;
         });
-        if(combatCount === 0) {
-            logMsg("[경고] 전투에 배정된 요원이 없습니다. 즉시 전투 패배 판정이 날 수 있습니다.", "atk");
-        }
         startPhase('combat');
     }
 
-    // 2. 전투 턴 처리
+    // 전투 로직
     function renderCombatTurn() {
-        const panel = document.getElementById('action-controls');
-        
-        // 전투 종료 조건 검사
         let aliveChars = state.chars.filter(c => c.hp > 0 && c.mission === 'combat');
         let aliveEnemies = state.activeEnemies.filter(e => e.hp > 0);
+        const panel = document.getElementById('action-controls');
         
         if (state.combatTurnQueue.length === 0 || aliveChars.length === 0 || aliveEnemies.length === 0) {
             logMsg(`[전투 종료] 전투 페이즈가 마감되었습니다.`);
-            panel.innerHTML = `<button onclick="startPhase('explore')">탐색 페이즈로 이동</button>`;
+            panel.innerHTML = `<button onclick="startPhase('explore')" style="width:100%">탐색 페이즈로 이동</button>`;
             return;
         }
 
-        let entity = state.combatTurnQueue.shift();
+        let entity = state.combatTurnQueue[0]; // 큐의 맨 앞(현재 턴)
         
-        // 죽은 개체면 턴 넘김
-        if (entity.ref.hp <= 0) {
-            renderCombatTurn(); return;
+        // 사망자 및 도주자 턴 건너뛰기 완벽 차단
+        if ((entity.type === 'char' && (entity.ref.hp <= 0 || entity.ref.mission !== 'combat')) || 
+            (entity.type === 'enemy' && entity.ref.hp <= 0)) {
+            state.combatTurnQueue.push(state.combatTurnQueue.shift());
+            return renderCombatTurn();
         }
 
         if (entity.type === 'char') {
-            // 유저 직접 조작 UI
             let targetHtml = `<select id="combat-target">`;
-            aliveEnemies.forEach((e, idx) => { targetHtml += `<option value="${idx}">${e.name} (HP: ${e.hp})</option>`; });
+            aliveEnemies.forEach(e => { targetHtml += `<option value="${e.name}">${e.name} (HP: ${e.hp})</option>`; });
             targetHtml += `</select>`;
 
             panel.innerHTML = `
                 <div class="action-box" style="border-color:var(--accent-blue);">
-                    <p style="color:var(--accent-blue); margin-top:0;"><strong>[▶ ${entity.ref.name}의 턴]</strong></p>
-                    <label>대상 선택:</label>
-                    ${targetHtml}
+                    <p style="color:var(--accent-blue); margin-top:0;"><strong>[▶ 요원 ${entity.ref.name}의 턴]</strong></p>
+                    <label>대상 선택:</label>${targetHtml}
                     <div class="controls-row">
-                        <button onclick="combatAction('attack', '${entity.ref.name}')">기본 공격</button>
-                        <button onclick="combatAction('skill', '${entity.ref.name}')">스킬 사용</button>
-                        <button onclick="combatAction('flee', '${entity.ref.name}')">도주 시도</button>
+                        <button onclick="combatAction('attack')">기본 공격</button>
+                        <button onclick="combatAction('skill')" style="border-color:#ffeb3b">스킬 발동</button>
+                        <button onclick="combatAction('flee')">도주 시도</button>
                     </div>
                 </div>
             `;
         } else {
-            // 에너미 턴 (유저가 확인 버튼 누르기)
             panel.innerHTML = `
                 <div class="action-box" style="border-color:var(--accent-red);">
                     <p style="color:var(--accent-red); margin-top:0;"><strong>[▶ 적성개체 ${entity.ref.name}의 턴]</strong></p>
-                    <button onclick="enemyAutoAction('${entity.ref.name}')" style="width:100%">적 행동 진행</button>
+                    <button onclick="enemyAutoAction()" style="width:100%">적 행동 시뮬레이션</button>
                 </div>
             `;
         }
-        // 턴 큐 맨 뒤로 다시 넣기 (생존 확인은 다음 팝때)
-        state.combatTurnQueue.push(entity);
         updateUI();
     }
 
-    function combatAction(actionType, charName) {
-        let char = state.chars.find(c => c.name === charName);
-        let targetIdx = document.getElementById('combat-target').value;
-        let aliveEnemies = state.activeEnemies.filter(e => e.hp > 0);
-        let target = aliveEnemies[targetIdx];
+    function combatAction(actionType) {
+        let char = state.combatTurnQueue[0].ref;
+        if (actionType === 'skill') {
+            prepareSkill(char.name, 'combat');
+            return; 
+        }
+
+        let target = state.activeEnemies.find(e => e.name === document.getElementById('combat-target').value);
 
         if (actionType === 'attack') {
-            let atkRoll = roll(6) + char.stats.atk;
+            let atkRoll = roll(6) + getStat(char, 'atk');
             let defRoll = roll(6) + target.stats.def;
-            logMsg(`[공격 시도] ${char.name} -> ${target.name} (공격판정:${atkRoll} vs 방어판정:${defRoll})`);
+            logMsg(`[공격] ${char.name} -> ${target.name} (명중판정:${atkRoll} vs 방어:${defRoll})`);
             if (atkRoll >= defRoll) {
-                let dmg = roll(6);
-                target.hp -= dmg;
-                logMsg(`>> 명중! ${target.name}에게 ${dmg} 대미지.`, 'atk');
-            } else {
-                logMsg(`>> 빗나감! 상대가 방어했습니다.`);
-            }
+                let dmg = roll(6); target.hp -= dmg; logMsg(`>> 명중! ${dmg} 피해.`, 'atk');
+            } else logMsg(`>> 회피/방어됨.`);
         } else if (actionType === 'flee') {
             let enemyRoll = roll(6) + target.stats.luck;
-            let charRoll = roll(6) + char.stats.luck;
-            logMsg(`[도주 시도] ${char.name} (행운판정:${charRoll} vs 적:${enemyRoll})`);
+            let charRoll = roll(6) + getStat(char, 'luck');
+            logMsg(`[도주] ${char.name} (행운판정:${charRoll} vs 적:${enemyRoll})`);
             if(charRoll >= enemyRoll) {
-                logMsg(`>> 도주 성공! ${char.name}이(가) 이탈합니다. (요새 피해 방지)`);
-                char.mission = 'escaped'; // 이번 전투에서 제외
-            } else {
-                logMsg(`>> 도주 실패! 발목을 잡혔습니다.`, 'atk');
-            }
-        } else if (actionType === 'skill') {
-            if(!processSkill(char, target)) return; // 스킬 실패시 턴 종료 안넘어가게 할지 결정 (기획상 강제 턴 종료)
+                logMsg(`>> 도주 성공! ${char.name}이(가) 전투에서 완전히 이탈합니다.`);
+                char.mission = 'escaped'; 
+            } else logMsg(`>> 도주 실패! 발목이 잡혔습니다.`, 'atk');
         }
+
+        state.combatTurnQueue.push(state.combatTurnQueue.shift()); // 턴 종료
         renderCombatTurn();
     }
 
-    function enemyAutoAction(enemyName) {
-        let enemy = state.activeEnemies.find(e => e.name === enemyName);
-        let aliveChars = state.chars.filter(c => c.hp > 0 && c.mission === 'combat');
+    function enemyAutoAction() {
+        let enemy = state.combatTurnQueue[0].ref;
         
-        let targetChar = aliveChars.length > 0 ? aliveChars[Math.floor(Math.random() * aliveChars.length)] : null;
-
-        if (Math.random() > 0.3 && targetChar) {
-            let atkRoll = roll(6) + enemy.stats.atk;
-            let defRoll = roll(6) + targetChar.stats.def;
-            if (atkRoll >= defRoll) {
-                let dmg = roll(6);
-                targetChar.hp = Math.max(0, targetChar.hp - dmg);
-                logMsg(`[적 공격] ${enemy.name} -> ${targetChar.name} 명중! (${dmg} 피해)`, 'atk');
-            } else {
-                 logMsg(`[적 공격] ${enemy.name} -> ${targetChar.name} 공격을 회피/방어했습니다!`);
-            }
+        if (enemy.status.stun > 0) {
+            logMsg(`[상태이상] ${enemy.name} 기절 상태! 행동 불가. (잔여: ${enemy.status.stun}턴)`, 'heal');
+            enemy.status.stun--;
         } else {
-            let dmg = roll(6);
-            state.fortress.hp -= dmg;
-            logMsg(`[적 요새 공격] ${enemy.name} -> 요새에 ${dmg} 피해!`, 'atk');
+            let aliveChars = state.chars.filter(c => c.hp > 0 && c.mission === 'combat');
+            let targetChar = aliveChars.length > 0 ? aliveChars[Math.floor(Math.random() * aliveChars.length)] : null;
+
+            if (Math.random() > 0.3 && targetChar) {
+                let atkRoll = roll(6) + enemy.stats.atk;
+                let defRoll = roll(6) + getStat(targetChar, 'def');
+                if (atkRoll >= defRoll) {
+                    let dmg = roll(6);
+                    if (targetChar.buffs.barrier > 0) {
+                        targetChar.buffs.barrier--;
+                        logMsg(`[절대영도 방벽] ${targetChar.name}의 방벽이 공격을 완전히 무효화했습니다! (잔여방벽: ${targetChar.buffs.barrier})`, 'heal');
+                    } else {
+                        targetChar.hp = Math.max(0, targetChar.hp - dmg);
+                        logMsg(`[적 공격] ${enemy.name} -> ${targetChar.name} 명중! (${dmg} 피해)`, 'atk');
+                    }
+                } else logMsg(`[적 공격] ${enemy.name} -> ${targetChar.name} 빗나감!`);
+            } else {
+                let dmg = roll(6); state.fortress.hp -= dmg;
+                logMsg(`[적 요새 공격] ${enemy.name} -> 요새에 ${dmg} 피해!`, 'atk');
+            }
         }
+        
+        if (enemy.status.burn > 0) {
+            enemy.hp -= 1; enemy.status.burn--;
+            logMsg(`[상태이상] ${enemy.name} 화상 대미지 1 발생. (잔여: ${enemy.status.burn}턴)`, 'atk');
+        }
+
+        state.combatTurnQueue.push(state.combatTurnQueue.shift());
         renderCombatTurn();
     }
 
-    // 3. 탐색 페이즈 처리
+    // 탐색 로직 (미리 목표치 표시 기능 추가)
+    function generateExploreTarget() {
+        let base = roll(6) + 3; // 4~9
+        if (state.meteorDashSpots > 0) { base -= 1; state.meteorDashSpots--; logMsg(`(메테오 대시 효과: 스팟 목표치 1 하락)`, 'sys'); }
+        state.currentExploreTarget = base;
+    }
+
     function renderExploreUI() {
         const panel = document.getElementById('action-controls');
         let explorers = state.chars.filter(c => c.hp > 0 && c.mission === 'explore');
+        document.getElementById('current-phase-desc').innerText = `[탐색 페이즈] 잔여 스팟: ${state.exploreSpots}`;
         
         if (state.exploreSpots <= 0 || explorers.length === 0) {
-            panel.innerHTML = `<p>탐색 가능 스팟이 없거나 탐색 요원이 없습니다.</p><button onclick="startPhase('fortify')">보강 페이즈로 이동</button>`;
+            panel.innerHTML = `<p>탐색 가능 스팟이 없거나 요원이 없습니다.</p><button onclick="startPhase('fortify')" style="width:100%">보강 페이즈로 이동</button>`;
             return;
         }
 
@@ -510,67 +534,59 @@
 
         panel.innerHTML = `
             <div class="action-box">
-                <label>탐색자 선택:</label> ${charHtml}
+                <h4 style="margin-top:0; color:var(--accent-red)">발견된 스팟 목표치: ${state.currentExploreTarget}</h4>
+                <label>탐색 요원 선택:</label> ${charHtml}
                 <label>판정 스탯 선택:</label>
-                <select id="exp-stat">
-                    <option value="atk">공격력 (강행 돌파)</option>
-                    <option value="ctrl">제어력 (함정 해체)</option>
-                    <option value="luck">행운 (직감 탐색)</option>
-                </select>
+                <select id="exp-stat"><option value="atk">공격력 (강행 돌파)</option><option value="ctrl">제어력 (함정 해체)</option><option value="luck">행운 (직감 탐색)</option></select>
                 <div class="controls-row">
                     <button onclick="doExplore()">탐색 판정 실시</button>
-                    <button onclick="useExploreSkill()" style="border-color:#ffeb3b">스킬 발동</button>
+                    <button onclick="prepareSkill(state.chars.filter(c=>c.hp>0&&c.mission==='explore')[document.getElementById('exp-char').value].name, 'explore')" style="border-color:#ffeb3b">스킬 발동</button>
                 </div>
-                <button onclick="startPhase('fortify')" style="width:100%; border-color:#555;">탐색 즉시 종료 (보강 이동)</button>
+                <button onclick="startPhase('fortify')" style="width:100%; border-color:#555;">탐색 즉시 종료</button>
             </div>
         `;
     }
 
     function doExplore() {
-        let explorers = state.chars.filter(c => c.hp > 0 && c.mission === 'explore');
-        let charIdx = document.getElementById('exp-char').value;
-        let char = explorers[charIdx];
+        let char = state.chars.filter(c => c.hp > 0 && c.mission === 'explore')[document.getElementById('exp-char').value];
         let statType = document.getElementById('exp-stat').value;
-
-        state.exploreSpots--;
-        let targetVal = roll(6) + 3; // 목표치 4~9
+        let targetVal = state.currentExploreTarget;
+        let charRoll = roll(6) + getStat(char, statType);
         
-        let rollVal = roll(6) + char.stats[statType];
-        if (char.spec !== 'explore') rollVal += 1; // 비특화 행운/스탯 보정 (+1)
+        if (char.spec !== 'explore') charRoll += 1;
+        if (char.buffs.exploreBonus) charRoll += 2; // 폭풍의 도약 버프
 
-        logMsg(`[탐색 시도] ${char.name} (목표치:${targetVal} / 굴림:${rollVal})`);
+        logMsg(`[탐색 시도] ${char.name} (목표치:${targetVal} / 최종 굴림값:${charRoll})`);
 
-        if (rollVal >= targetVal) {
-            logMsg(`>> 탐색 성공! 아이템을 발견했습니다.`, 'heal');
-            // source2 기반 아이템 확률
-            const pool = [
-                {name:"붕대", c:35},{name:"피로 회복제", c:25},{name:"구급 상자", c:20},
-                {name:"비타민", c:10},{name:"전문 응급 처치 키트", c:6},{name:"전문 피로 회복 키트", c:4}
-            ];
-            let r = Math.random()*100, w = 0;
-            for(let i of pool){
-                w += i.c;
-                if(r <= w){ logMsg(`[획득] ${i.name}`, 'sys'); break; }
-            }
+        if (char.buffs.autoExplore > 0) {
+            char.buffs.autoExplore--;
+            logMsg(`>> [어둠의 장막] 탐색이 강제로 성공 처리됩니다! (잔여 버프: ${char.buffs.autoExplore}회)`, 'heal');
+            exploreSuccess();
+        } else if (charRoll >= targetVal) {
+            logMsg(`>> 탐색 성공!`, 'heal');
+            exploreSuccess();
         } else {
             logMsg(`>> 탐색 실패. 함정에 빠져 체력 1 차감.`, 'atk');
             char.hp = Math.max(0, char.hp - 1);
         }
         
-        document.getElementById('current-phase-desc').innerText = `[탐색 페이즈] 잔여 스팟: ${state.exploreSpots}`;
-        updateUI();
-        renderExploreUI();
+        state.exploreSpots--;
+        if(state.exploreSpots > 0) generateExploreTarget();
+        updateUI(); renderExploreUI();
     }
 
-    // 4. 보강 페이즈 처리
+    function exploreSuccess() {
+        const pool = [ {name:"붕대", c:35},{name:"피로 회복제", c:25},{name:"구급 상자", c:20}, {name:"비타민", c:10},{name:"전문 응급 처치 키트", c:6},{name:"전문 피로 회복 키트", c:4} ];
+        let r = Math.random()*100, w = 0;
+        for(let i of pool){ w += i.c; if(r <= w){ logMsg(`[아이템 획득] ${i.name}`, 'sys'); state.inventory[i.name]++; break; } }
+    }
+
+    // 보강 로직
     function renderFortifyUI(targetVal) {
         const panel = document.getElementById('action-controls');
         let fortifiers = state.chars.filter(c => c.hp > 0 && c.mission === 'fortify');
         
-        if (fortifiers.length === 0) {
-            panel.innerHTML = `<p>보강 요원이 없습니다.</p><button onclick="endDay()">하루 종료</button>`;
-            return;
-        }
+        if (fortifiers.length === 0) { panel.innerHTML = `<p>보강 요원이 없습니다.</p><button onclick="endDay()" style="width:100%">하루 종료</button>`; return; }
 
         let charHtml = `<select id="fort-char">`;
         fortifiers.forEach((c, idx) => charHtml += `<option value="${idx}">${c.name}</option>`);
@@ -578,16 +594,12 @@
 
         panel.innerHTML = `
             <div class="action-box">
-                <label>보강자 선택:</label> ${charHtml}
+                <label>보강 요원 선택:</label> ${charHtml}
                 <label>판정 스탯 선택:</label>
-                <select id="fort-stat">
-                    <option value="def">방어력 (구조물 보강)</option>
-                    <option value="ctrl">제어력 (시스템 수리)</option>
-                    <option value="luck">행운 (임시 땜질)</option>
-                </select>
+                <select id="fort-stat"><option value="def">방어력</option><option value="ctrl">제어력</option><option value="luck">행운</option></select>
                 <div class="controls-row">
                     <button onclick="doFortify(${targetVal})">보강 판정 실시</button>
-                    <button onclick="useFortifySkill()" style="border-color:#ffeb3b">스킬 발동</button>
+                    <button onclick="prepareSkill(state.chars.filter(c=>c.hp>0&&c.mission==='fortify')[document.getElementById('fort-char').value].name, 'fortify')" style="border-color:#ffeb3b">스킬 발동</button>
                 </div>
                 <button onclick="endDay()" style="width:100%; border-color:#555;">보강 즉시 종료</button>
             </div>
@@ -595,124 +607,150 @@
     }
 
     function doFortify(targetVal) {
-        let fortifiers = state.chars.filter(c => c.hp > 0 && c.mission === 'fortify');
-        let charIdx = document.getElementById('fort-char').value;
-        let char = fortifiers[charIdx];
-        let statType = document.getElementById('fort-stat').value;
-
-        let rollVal = roll(6) + char.stats[statType];
+        let char = state.chars.filter(c => c.hp > 0 && c.mission === 'fortify')[document.getElementById('fort-char').value];
+        let rollVal = roll(6) + getStat(char, document.getElementById('fort-stat').value);
         if (char.spec !== 'fortify') rollVal += 1;
 
-        logMsg(`[보강 시도] ${char.name} (목표치:${targetVal} / 굴림:${rollVal})`);
-
+        logMsg(`[보강 시도] ${char.name} (목표치:${targetVal} / 최종 굴림값:${rollVal})`);
         if (rollVal >= targetVal) {
-            let heal = roll(6);
-            state.fortress.hp += heal;
+            let heal = roll(6); state.fortress.hp += heal;
             logMsg(`>> 보강 성공! 요새 체력이 ${heal} 회복되었습니다.`, 'heal');
-            document.getElementById('action-controls').innerHTML = `<button onclick="endDay()">하루 종료</button>`;
+            document.getElementById('action-controls').innerHTML = `<button onclick="endDay()" style="width:100%">하루 종료</button>`;
         } else {
-            logMsg(`>> 보강 실패. 과도한 업무로 기력 1 차감.`);
-            char.sp = Math.max(0, char.sp - 1);
+            logMsg(`>> 보강 실패. 과도한 업무로 기력 1 차감.`); char.sp = Math.max(0, char.sp - 1);
         }
         updateUI();
     }
 
-    // --- 공용 스킬 판정 시스템 (Req 6) ---
-    function processSkill(char, targetObj = null) {
+    // --- 스킬 10종 완벽 대응 시스템 ---
+    function prepareSkill(charName, phase) {
+        const char = state.chars.find(c => c.name === charName);
+        let html = `<div class="action-box" style="border-color:#ffeb3b;"><h4 style="margin:0 0 10px 0; color:#ffeb3b;">스킬 타겟 설정: [${char.skill}]</h4>`;
+        
+        let allyOpts = ""; state.chars.filter(c => c.hp > 0).forEach(c => allyOpts += `<option value="${c.name}">${c.name}</option>`);
+        let enemyOpts = ""; state.activeEnemies.filter(e => e.hp > 0).forEach(e => enemyOpts += `<option value="${e.name}">${e.name} (HP:${e.hp})</option>`);
+        let statOpts = `<option value="atk">공격</option><option value="def">방어</option><option value="ctrl">제어</option><option value="luck">행운</option>`;
+
+        if (char.skill === '정화의 파도') {
+            html += `<label>대상:</label><select id="sk-tgt1">${allyOpts}</select><br><label>회복:</label><select id="sk-opt1"><option value="hp">체력</option><option value="sp">기력</option></select>`;
+        } else if (char.skill === '맹독의 정수') {
+            html += `<label>대상 1:</label><select id="sk-tgt1">${allyOpts}</select> 스탯: <select id="sk-opt1">${statOpts}</select><br>`;
+            html += `<label>대상 2:</label><select id="sk-tgt2">${allyOpts}</select> 스탯: <select id="sk-opt2">${statOpts}</select>`;
+        } else if (['절대영도', '어둠의 장막', '폭풍의 도약'].includes(char.skill)) {
+            html += `<label>대상:</label><select id="sk-tgt1">${allyOpts}</select>`;
+        } else if (['플레임 스트라이크', '페이트 오브 스틸'].includes(char.skill)) {
+            html += `<label>적 대상:</label><select id="sk-tgt1">${enemyOpts}</select>`;
+        } else {
+            html += `<p style="font-size:0.9em">시스템 전체 혹은 적 전체 타겟 스킬입니다. 별도 지정이 필요 없습니다.</p>`;
+        }
+
+        html += `<div class="controls-row" style="margin-top:15px;">
+            <button onclick="executeSkill('${char.name}', '${phase}')" style="background-color:#ffeb3b; color:#000;">발동 시작</button>
+            <button onclick="cancelSkill('${phase}')">취소</button>
+        </div></div>`;
+        document.getElementById('action-controls').innerHTML = html;
+    }
+
+    function cancelSkill(phase) {
+        if (phase === 'combat') renderCombatTurn();
+        else if (phase === 'explore') renderExploreUI();
+        else renderFortifyUI(state.currentExploreTarget); // fallback
+    }
+
+    function executeSkill(charName, phase) {
+        const char = state.chars.find(c => c.name === charName);
         let spCost = roll(4) + 2;
-        logMsg(`[이능력 발동] ${char.name}의 '${char.skill}' (요구 기력: ${spCost})`);
+        logMsg(`[이능력 발동] ${char.name} - '${char.skill}' (요구 기력: ${spCost})`);
         
         if (char.sp < spCost) {
-            logMsg(`>> 시스템 에러: 기력이 부족합니다. (현재:${char.sp}) 스킬 발동 무효 및 턴 종료.`, 'atk');
-            return true; // 턴 넘김
-        }
-        char.sp -= spCost; // 기력 차감
-
-        let targetControl = roll(3) + 6; // [7~9] 사이 랜덤
-        let ctrlRoll = roll(6) + char.stats.ctrl;
-        
-        logMsg(`[제어 판정] (목표치:${targetControl} vs 굴림:${ctrlRoll})`);
-        if (ctrlRoll >= targetControl) {
-            logMsg(`>> 제어 성공! 스킬 효과가 적용됩니다.`, 'heal');
-            // 스킬 이름 기반 범용 효과 처리
-            if (char.skill.includes('치료') || char.skill.includes('회복')) {
-                char.hp = Math.min(char.maxHp, char.hp + 5);
-                logMsg(`[효과] 체력을 대폭 회복했습니다.`, 'heal');
-            } else if (char.skill.includes('강타') || char.skill.includes('공격')) {
-                if(targetObj) {
-                    targetObj.hp -= 10;
-                    logMsg(`[효과] 대상에게 10의 관통 대미지!`, 'atk');
-                }
-            } else if (char.skill.includes('방벽') || char.skill.includes('보호')) {
-                state.fortress.hp += 5;
-                logMsg(`[효과] 요새 체력을 5 보충했습니다.`, 'heal');
-            } else {
-                logMsg(`[효과] 특수 이능력이 발현되었습니다! (보너스 스탯 판정 등)`);
-            }
+            logMsg(`>> 기력이 부족합니다. (현재:${char.sp}) 발동 무효.`, 'atk');
         } else {
-            logMsg(`>> 제어 실패. 기력만 소모하고 효과는 발생하지 않았습니다.`, 'atk');
+            char.sp -= spCost;
+            let targetControl = roll(3) + 6; 
+            let ctrlRoll = roll(6) + getStat(char, 'ctrl');
+            
+            logMsg(`[제어 판정] (목표치:${targetControl} vs 굴림:${ctrlRoll})`);
+            if (ctrlRoll >= targetControl) {
+                logMsg(`>> 제어 성공! 스킬 효과가 발현됩니다.`, 'heal');
+                applySkillEffect(char);
+            } else logMsg(`>> 제어 실패. 기력만 소모되었습니다.`, 'atk');
         }
+        
         updateUI();
-        return true;
+        if (phase === 'combat') { state.combatTurnQueue.push(state.combatTurnQueue.shift()); renderCombatTurn(); }
+        else if (phase === 'explore') renderExploreUI();
+        else renderFortifyUI(state.currentExploreTarget);
     }
 
-    function useExploreSkill() {
-        let explorers = state.chars.filter(c => c.hp > 0 && c.mission === 'explore');
-        let charIdx = document.getElementById('exp-char').value;
-        processSkill(explorers[charIdx]);
-    }
+    function applySkillEffect(char) {
+        let t1 = document.getElementById('sk-tgt1') ? document.getElementById('sk-tgt1').value : null;
+        let t2 = document.getElementById('sk-tgt2') ? document.getElementById('sk-tgt2').value : null;
+        let o1 = document.getElementById('sk-opt1') ? document.getElementById('sk-opt1').value : null;
+        let o2 = document.getElementById('sk-opt2') ? document.getElementById('sk-opt2').value : null;
 
-    function useFortifySkill() {
-        let fortifiers = state.chars.filter(c => c.hp > 0 && c.mission === 'fortify');
-        let charIdx = document.getElementById('fort-char').value;
-        processSkill(fortifiers[charIdx]);
+        let ally1 = t1 ? state.chars.find(c => c.name === t1) : null;
+        let ally2 = t2 ? state.chars.find(c => c.name === t2) : null;
+        let enemy1 = t1 ? state.activeEnemies.find(e => e.name === t1) : null;
+
+        switch(char.skill) {
+            case '오버차지 필드':
+                let stunTurns = roll(3) + 1;
+                state.activeEnemies.filter(e => e.hp > 0).forEach(e => e.status.stun = stunTurns);
+                logMsg(`[효과] 모든 생존 적성개체가 ${stunTurns}턴 동안 기절합니다!`, 'heal'); break;
+            case '플레임 스트라이크':
+                if(enemy1) { let dmg = roll(6) + 3; let burn = roll(3); enemy1.hp -= dmg; enemy1.status.burn = burn; logMsg(`[효과] ${enemy1.name}에게 ${dmg} 피해 및 화상 ${burn}턴!`, 'atk'); } break;
+            case '어둠의 장막':
+                if(ally1) { ally1.buffs.autoExplore = 2; logMsg(`[효과] ${ally1.name}의 향후 탐색 2회가 강제 성공 처리됩니다!`, 'heal'); } break;
+            case '폭풍의 도약':
+                if(ally1) { ally1.buffs.exploreBonus = true; logMsg(`[효과] ${ally1.name}은(는) 이번 페이즈 탐색에 +2 보정을 받습니다!`, 'heal'); } break;
+            case '절대영도':
+                if(ally1) { ally1.buffs.barrier += 2; logMsg(`[효과] ${ally1.name}에게 2회성 방벽이 씌워졌습니다!`, 'heal'); } break;
+            case '정화의 파도':
+                if(ally1 && o1) { let heal = roll(10) + 2; if(o1 === 'hp') { ally1.hp = Math.min(ally1.maxHp, ally1.hp + heal); logMsg(`[효과] 체력 ${heal} 회복!`, 'heal'); } else { ally1.sp = Math.min(ally1.maxSp, ally1.sp + heal); logMsg(`[효과] 기력 ${heal} 회복!`, 'heal'); } } break;
+            case '메테오 대시':
+                state.meteorDashSpots = 5; logMsg(`[효과] 향후 5번의 스팟 목표치가 1씩 영구 하락합니다!`, 'heal'); break;
+            case '루트 리페어':
+                let fHeal = roll(6) + 2; state.fortress.hp += fHeal; logMsg(`[효과] 요새 체력이 ${fHeal} 수리되었습니다!`, 'heal'); break;
+            case '페이트 오브 스틸':
+                if(enemy1) {
+                    let dmg = roll(4) + 2; let luckRoll = roll(6) + getStat(char, 'luck');
+                    logMsg(`[효과] ${enemy1.name}에게 ${dmg} 피해! (행운 판정: ${luckRoll} vs 8)`); enemy1.hp -= dmg;
+                    if(luckRoll >= 8) { let extra = roll(6) + 2; enemy1.hp -= extra; logMsg(`>> 잭팟 타격! 추가 ${extra} 피해!`, 'atk'); }
+                } break;
+            case '맹독의 정수':
+                if(ally1 && o1) { ally1.buffs.awakening = o1; logMsg(`[효과] ${ally1.name}의 [${o1}] 각성 (+1)!`, 'heal'); }
+                if(ally2 && o2) { ally2.buffs.awakening = o2; logMsg(`[효과] ${ally2.name}의 [${o2}] 각성 (+1)!`, 'heal'); } break;
+        }
     }
 
     // 일과 종료
     function endDay() {
         if (state.fortress.hp <= 0) {
-            logMsg(`[CRITICAL] 요새 체력 0. 방어선 붕괴! 전 인원 체력 페널티.`, 'atk');
-            state.chars.forEach(c => { c.hp = Math.max(0, c.hp - roll(4)); });
+            logMsg(`[CRITICAL] 요새 방어막 붕괴. 전원 체력 피해 발생.`, 'atk');
+            state.chars.forEach(c => c.hp = Math.max(0, c.hp - roll(4)));
         }
         
-        // 보강 안 한 인원 휴식 로직
         state.chars.forEach(c => {
-            if(c.mission === 'fortify' && c.hp > 0) {
-                // (기획: 보강 판정 진행하지 않은 캐릭터 회복 - 간략화 적용)
-                c.hp = Math.min(c.maxHp, c.hp + roll(2));
-                c.sp = Math.min(c.maxSp, c.sp + roll(2));
-            }
+            if(c.mission === 'fortify' && c.hp > 0) { c.hp = Math.min(c.maxHp, c.hp + roll(2)); c.sp = Math.min(c.maxSp, c.sp + roll(2)); }
+            c.buffs = { autoExplore: 0, exploreBonus: false, barrier: 0, awakening: null };
         });
+        state.meteorDashSpots = 0;
 
         logMsg(`========== DAY ${state.day} 종료 ==========\n`);
-        state.day++;
-        startPhase('assign');
+        state.day++; startPhase('assign');
     }
 
     function saveGame() {
-        const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(state));
-        const downloadAnchorNode = document.createElement('a');
-        downloadAnchorNode.setAttribute("href", dataStr);
-        downloadAnchorNode.setAttribute("download", `ASyncAlpha_Save_Day${state.day}.json`);
-        document.body.appendChild(downloadAnchorNode);
-        downloadAnchorNode.click();
-        downloadAnchorNode.remove();
+        const a = document.createElement('a'); a.href = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(state));
+        a.download = `ASyncAlpha_Save_Day${state.day}.json`; document.body.appendChild(a); a.click(); a.remove();
         logMsg("데이터 세이브 완료.");
     }
 
-    function loadGame(event) {
-        const file = event.target.files[0];
-        if (!file) return;
-        const reader = new FileReader();
-        reader.onload = function(e) {
-            state = JSON.parse(e.target.result);
-            updateUI();
-            logMsg("백업 데이터 로드 완료.");
-            startPhase(state.phase);
-        };
-        reader.readAsText(file);
+    function loadGame(e) {
+        const r = new FileReader();
+        r.onload = function(e) { state = JSON.parse(e.target.result); updateUI(); logMsg("백업 로드 완료."); startPhase(state.phase); };
+        if(e.target.files[0]) r.readAsText(e.target.files[0]);
     }
 </script>
-
 </body>
 </html>
