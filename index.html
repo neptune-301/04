@@ -1,0 +1,429 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>A-Sync Alpha 시뮬레이터</title>
+    <style>
+        :root {
+            --bg-dark: #121212;
+            --panel-bg: #1e1e1e;
+            --text-light: #e0e0e0;
+            --accent-blue: #4fc3f7;
+            --accent-red: #e57373;
+            --accent-green: #81c784;
+            --border-color: #333;
+        }
+        body {
+            font-family: 'Malgun Gothic', sans-serif;
+            background-color: var(--bg-dark);
+            color: var(--text-light);
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        .container {
+            width: 100%;
+            max-width: 1000px;
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+        }
+        .panel {
+            background-color: var(--panel-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 20px;
+        }
+        .header-panel {
+            grid-column: 1 / -1;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .header-panel h1 { margin: 0; color: var(--accent-blue); }
+        .log-panel {
+            grid-column: 1 / -1;
+            height: 250px;
+            overflow-y: auto;
+            background-color: #000;
+            padding: 10px;
+            font-family: monospace;
+            border-radius: 4px;
+        }
+        .log-entry { margin-bottom: 5px; }
+        .log-sys { color: #fff59d; }
+        .log-atk { color: var(--accent-red); }
+        .log-heal { color: var(--accent-green); }
+        button {
+            background-color: #333;
+            color: white;
+            border: 1px solid #555;
+            padding: 8px 16px;
+            cursor: pointer;
+            border-radius: 4px;
+            transition: 0.2s;
+        }
+        button:hover { background-color: #555; }
+        button:disabled { opacity: 0.5; cursor: not-allowed; }
+        .char-card {
+            border: 1px solid #444;
+            padding: 10px;
+            margin-bottom: 10px;
+            border-radius: 4px;
+            background-color: #252525;
+        }
+        .bar-container {
+            width: 100%; background-color: #111; height: 10px; border-radius: 5px; margin: 5px 0;
+        }
+        .bar-hp { background-color: var(--accent-red); height: 100%; border-radius: 5px; transition: width 0.3s; }
+        .bar-sp { background-color: var(--accent-blue); height: 100%; border-radius: 5px; transition: width 0.3s; }
+        .controls { display: flex; gap: 10px; margin-top: 15px; flex-wrap: wrap; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <div class="panel header-panel">
+        <div>
+            <h1>A-Sync Alpha</h1>
+            <p>Day: <span id="day-counter">1</span> | 요새 체력: <span id="fortress-hp">50</span></p>
+        </div>
+        <div>
+            <button onclick="saveGame()">상황 저장하기</button>
+            <button onclick="document.getElementById('loadInput').click()">상황 불러오기</button>
+            <input type="file" id="loadInput" style="display:none" accept=".json" onchange="loadGame(event)">
+        </div>
+    </div>
+
+    <div class="panel" id="roster-panel">
+        <h3>부대 상황 (캐릭터 목록)</h3>
+        <div id="char-list"></div>
+    </div>
+
+    <div class="panel" id="action-panel">
+        <h3>상황판 / 액션</h3>
+        <p id="current-phase-desc">데이터 연동을 기다리는 중...</p>
+        <div class="controls" id="action-controls">
+            <!-- 액션 버튼이 여기에 표시됩니다 -->
+        </div>
+    </div>
+
+    <div class="panel log-panel" id="log-window"></div>
+</div>
+
+<script>
+    const roll = (sides) => Math.floor(Math.random() * sides) + 1;
+    function logMsg(msg, type = 'sys') {
+        const logWindow = document.getElementById('log-window');
+        const entry = document.createElement('div');
+        entry.className = `log-entry log-${type}`;
+        entry.innerText = msg;
+        logWindow.appendChild(entry);
+        logWindow.scrollTop = logWindow.scrollHeight;
+    }
+
+    // --- 기본 게임 상태 ---
+    let state = {
+        day: 1,
+        phase: 'standby',
+        fortress: { hp: 50, maxHp: 50 },
+        inventory: { 붕대: 0, 피로회복제: 0, 구급상자: 0, 비타민: 0, 전문응급처치키트: 0, 전문피로회복키트: 0 },
+        chars: [], // 캐릭터.csv 연동
+        enemiesDB: [], // 에너미.csv 연동
+        skillsDB: [], // 스킬.csv 연동
+        activeEnemies: [],
+        combatTurnQueue: [],
+        exploreSpots: 10
+    };
+
+    const itemPool = [
+        { name: "붕대", chance: 35, effect: () => ({ hp: roll(4) }) },
+        { name: "피로 회복제", chance: 25, effect: () => ({ sp: roll(4) }) },
+        { name: "구급 상자", chance: 20, effect: () => ({ hp: roll(4) + 2 }) },
+        { name: "비타민", chance: 10, effect: () => ({ sp: roll(4) + 2 }) },
+        { name: "전문 응급 처치 키트", chance: 6, effect: () => ({ hp: roll(6) + 2 }) },
+        { name: "전문 피로 회복 키트", chance: 4, effect: () => ({ sp: roll(6) + 2 }) }
+    ];
+
+    // --- CSV 파서 ---
+    function parseCSV(text) {
+        const lines = text.trim().split(/\r?\n/);
+        const headers = lines[0].split(',').map(h => h.trim());
+        return lines.slice(1).map(line => {
+            const values = line.split(',').map(v => v.trim());
+            const obj = {};
+            headers.forEach((h, i) => obj[h] = values[i]);
+            return obj;
+        });
+    }
+
+    // --- 데이터 자동 로드 (GitHub 배포 환경용) ---
+    async function fetchCSVData() {
+        logMsg("[시스템] 깃허브에서 게임 데이터(CSV)를 불러옵니다...");
+        let dataLoaded = false;
+        
+        try {
+            // 캐릭터.csv 로드
+            const charRes = await fetch('캐릭터.csv');
+            if (charRes.ok) {
+                const charData = parseCSV(await charRes.text());
+                state.chars = charData.map(d => ({
+                    name: d['이름'],
+                    hp: parseInt(d['체력']), maxHp: parseInt(d['체력']),
+                    sp: parseInt(d['기력']), maxSp: parseInt(d['기력']),
+                    stats: { atk: parseInt(d['공격']), def: parseInt(d['방어']), ctrl: parseInt(d['제어']), luck: parseInt(d['행운']) },
+                    skill: d['스킬'],
+                    spec: d['특화'] === '전투' ? 'combat' : (d['특화'] === '탐색' ? 'explore' : 'fortify')
+                }));
+                logMsg("✔️ 캐릭터.csv 로드 완료", 'heal');
+                dataLoaded = true;
+            }
+
+            // 에너미.csv 로드
+            const enemyRes = await fetch('에너미.csv');
+            if (enemyRes.ok) {
+                const enemyData = parseCSV(await enemyRes.text());
+                state.enemiesDB = enemyData.map(d => ({
+                    name: d['이름'], hp: parseInt(d['체력']),
+                    stats: { atk: parseInt(d['공격']), def: parseInt(d['방어']), luck: parseInt(d['행운']) }
+                }));
+                logMsg("✔️ 에너미.csv 로드 완료", 'heal');
+            }
+
+            // 스킬.csv 로드
+            const skillRes = await fetch('스킬.csv');
+            if (skillRes.ok) {
+                state.skillsDB = parseCSV(await skillRes.text());
+                logMsg("✔️ 스킬.csv 로드 완료", 'heal');
+            }
+
+        } catch (e) {
+            logMsg("[경고] CSV 파일을 찾을 수 없습니다. HTML 파일을 브라우저에서 직접 열면(로컬) 보안 정책상 파일 로드가 안 될 수 있습니다. 깃허브에 올려서 확인하세요.", 'atk');
+        }
+
+        if (dataLoaded) {
+            logMsg("[시스템] 모든 초기 세팅이 완료되었습니다. 게임을 시작할 수 있습니다.");
+            document.getElementById('action-controls').innerHTML = `<button onclick="startPhase('assign')">임무 배정 (하루 시작)</button>`;
+            document.getElementById('current-phase-desc').innerText = "임무를 배정하고 하루를 시작하세요.";
+            updateUI();
+        }
+    }
+
+    // 초기 화면 로드 시 실행
+    window.onload = () => {
+        fetchCSVData();
+    };
+
+    // --- UI 업데이트 ---
+    function updateUI() {
+        document.getElementById('day-counter').innerText = state.day;
+        document.getElementById('fortress-hp').innerText = state.fortress.hp;
+        
+        const roster = document.getElementById('char-list');
+        roster.innerHTML = '';
+        state.chars.forEach((c) => {
+            const hpPct = Math.max(0, (c.hp / c.maxHp) * 100);
+            const spPct = Math.max(0, (c.sp / c.maxSp) * 100);
+            roster.innerHTML += `
+                <div class="char-card">
+                    <strong>${c.name}</strong> (특화: ${c.spec === 'combat'?'전투':c.spec==='explore'?'탐색':'보강'}) | 스킬: ${c.skill} <br>
+                    <small>공:${c.stats.atk} 방:${c.stats.def} 제:${c.stats.ctrl} 행:${c.stats.luck}</small>
+                    <div class="bar-container"><div class="bar-hp" style="width: ${hpPct}%"></div></div>
+                    <small>체력: ${c.hp}/${c.maxHp}</small>
+                    <div class="bar-container"><div class="bar-sp" style="width: ${spPct}%"></div></div>
+                    <small>기력: ${c.sp}/${c.maxSp}</small>
+                </div>
+            `;
+        });
+    }
+
+    // --- 메인 게임 루프 ---
+    function startPhase(phase) {
+        state.phase = phase;
+        const panel = document.getElementById('action-controls');
+        const desc = document.getElementById('current-phase-desc');
+
+        if (phase === 'assign') {
+            desc.innerText = `[Day ${state.day}] 전투 페이즈를 시작합니다.`;
+            logMsg(`\n=== Day ${state.day} 시작 ===`);
+            panel.innerHTML = `<button onclick="startPhase('combat')">전투 진입</button>`;
+        } 
+        else if (phase === 'combat') {
+            desc.innerText = `전투 페이즈 진행 중!`;
+            logMsg(`[전투] 게이트에서 괴물이 등장했습니다!`);
+            
+            // 데이터베이스에서 랜덤 2체 스폰
+            if(state.enemiesDB.length >= 1) {
+                state.activeEnemies = [
+                    JSON.parse(JSON.stringify(state.enemiesDB[Math.floor(Math.random() * state.enemiesDB.length)])),
+                    JSON.parse(JSON.stringify(state.enemiesDB[Math.floor(Math.random() * state.enemiesDB.length)]))
+                ];
+            }
+            
+            let queue = [];
+            state.chars.forEach(c => queue.push({type: 'char', ref: c, init: roll(6) + c.stats.luck}));
+            state.activeEnemies.forEach(e => queue.push({type: 'enemy', ref: e, init: roll(6) + e.stats.luck}));
+            queue.sort((a, b) => b.init - a.init);
+            state.combatTurnQueue = queue;
+
+            panel.innerHTML = `<button onclick="nextCombatTurn()">턴 진행 (전투 시뮬레이션)</button>`;
+        }
+        else if (phase === 'explore') {
+            state.exploreSpots = 10;
+            desc.innerText = `탐색 페이즈 (남은 스팟: ${state.exploreSpots})`;
+            logMsg(`\n[탐색] 탐색을 시작합니다. 10개의 스팟이 발견되었습니다.`);
+            panel.innerHTML = `
+                <button onclick="doExplore()">탐색 1회 진행</button>
+                <button onclick="startPhase('fortify')">탐색 즉시 종료</button>
+            `;
+        }
+        else if (phase === 'fortify') {
+            let targetVal = roll(6) + 5; 
+            desc.innerText = `보강 페이즈 (목표치: ${targetVal})`;
+            logMsg(`\n[보강] 요새 보강 작업 시작 (목표치: ${targetVal})`);
+            panel.innerHTML = `
+                <button onclick="doFortify(${targetVal})">보강 1회 시도</button>
+                <button onclick="endDay()">보강 종료 (하루 끝내기)</button>
+            `;
+        }
+    }
+
+    function nextCombatTurn() {
+        if (state.combatTurnQueue.length === 0 || state.chars.every(c => c.hp <= 0) || state.activeEnemies.every(e => e.hp <= 0)) {
+            logMsg(`[전투] 상황 종료! 탐색 페이즈로 이동합니다.`);
+            document.getElementById('action-controls').innerHTML = `<button onclick="startPhase('explore')">탐색 페이즈로 이동</button>`;
+            return;
+        }
+
+        let entity = state.combatTurnQueue.shift();
+        if (entity.ref.hp <= 0) {
+            nextCombatTurn(); return;
+        }
+
+        if (entity.type === 'char') {
+            let target = state.activeEnemies.find(e => e.hp > 0);
+            if (target) {
+                let atkRoll = roll(6) + entity.ref.stats.atk;
+                let defRoll = roll(6) + target.stats.def;
+                if (atkRoll >= defRoll) {
+                    let dmg = roll(6);
+                    target.hp -= dmg;
+                    logMsg(`[공격 성공] ${entity.ref.name} -> ${target.name} 에게 ${dmg} 대미지!`, 'atk');
+                } else {
+                    logMsg(`[공격 실패] ${target.name} 이(가) ${entity.ref.name}의 공격을 막아냈습니다.`);
+                }
+            }
+        } else {
+            let targetChar = state.chars.find(c => c.hp > 0);
+            if (Math.random() > 0.3 && targetChar) {
+                let atkRoll = roll(6) + entity.ref.stats.atk;
+                let defRoll = roll(6) + targetChar.stats.def;
+                if (atkRoll >= defRoll) {
+                    let dmg = roll(6);
+                    targetChar.hp = Math.max(0, targetChar.hp - dmg);
+                    logMsg(`[피격] ${entity.ref.name} -> ${targetChar.name} 에게 ${dmg} 대미지!`, 'atk');
+                } else {
+                     logMsg(`[방어 성공] ${targetChar.name} 이(가) 공격을 흘려냈습니다.`);
+                }
+            } else {
+                let dmg = roll(6);
+                state.fortress.hp -= dmg;
+                logMsg(`[요새 피격] ${entity.ref.name} -> 요새에 ${dmg} 대미지!`, 'atk');
+            }
+        }
+        
+        state.combatTurnQueue.push(entity);
+        updateUI();
+    }
+
+    function doExplore() {
+        if (state.exploreSpots <= 0) return;
+        state.exploreSpots--;
+        let targetVal = roll(6) + 4; 
+        let char = state.chars.find(c => c.hp > 0); 
+        
+        if (!char) return;
+
+        let rollVal = roll(6) + char.stats.luck;
+        if (char.spec !== 'explore') rollVal += 1;
+
+        if (rollVal >= targetVal) {
+            logMsg(`[탐색 성공] ${char.name} (판정 성공) - 아이템 발견!`, 'heal');
+            let rand = Math.random() * 100;
+            let currentWeight = 0;
+            for (let item of itemPool) {
+                currentWeight += item.chance;
+                if (rand <= currentWeight) {
+                    logMsg(`획득 아이템: ${item.name}!`, 'heal');
+                    state.inventory[item.name.replace(/ /g, "")] = (state.inventory[item.name.replace(/ /g, "")] || 0) + 1;
+                    break;
+                }
+            }
+        } else {
+            logMsg(`[탐색 실패] ${char.name} - 함정에 걸려 체력이 1 차감됩니다.`, 'atk');
+            char.hp = Math.max(0, char.hp - 1);
+        }
+        document.getElementById('current-phase-desc').innerText = `탐색 페이즈 (남은 스팟: ${state.exploreSpots})`;
+        updateUI();
+    }
+
+    function doFortify(targetVal) {
+        let char = state.chars.find(c => c.hp > 0);
+        if (!char) return;
+
+        let rollVal = roll(6) + char.stats.def; 
+        if (rollVal >= targetVal) {
+            let heal = roll(6);
+            state.fortress.hp += heal;
+            logMsg(`[보강 성공] ${char.name} 판정 성공! 요새 체력 ${heal} 회복.`, 'heal');
+            document.getElementById('action-controls').innerHTML = `<button onclick="endDay()">보강 성공 (하루 끝내기)</button>`;
+        } else {
+            logMsg(`[보강 실패] ${char.name} 판정 실패. 기력 1 차감.`);
+            char.sp = Math.max(0, char.sp - 1);
+        }
+        updateUI();
+    }
+
+    function endDay() {
+        if (state.fortress.hp <= 0) {
+            logMsg(`[경고] 요새 체력이 0입니다! 모든 요원 체력 1D4 차감.`, 'atk');
+            state.chars.forEach(c => { c.hp = Math.max(0, c.hp - roll(4)); });
+        }
+        
+        logMsg(`=== Day ${state.day} 종료 ===\n`);
+        state.day++;
+        updateUI();
+        startPhase('assign');
+    }
+
+    // --- JSON 세이브/로드 기능 (진행 상황 저장) ---
+    function saveGame() {
+        const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(state));
+        const downloadAnchorNode = document.createElement('a');
+        downloadAnchorNode.setAttribute("href", dataStr);
+        downloadAnchorNode.setAttribute("download", `ASyncAlpha_Save_Day${state.day}.json`);
+        document.body.appendChild(downloadAnchorNode);
+        downloadAnchorNode.click();
+        downloadAnchorNode.remove();
+        logMsg("[시스템] 진행 상황이 로컬에 저장되었습니다.");
+    }
+
+    function loadGame(event) {
+        const file = event.target.files[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            state = JSON.parse(e.target.result);
+            updateUI();
+            logMsg("[시스템] 저장된 데이터를 불러왔습니다.");
+            startPhase(state.phase);
+        };
+        reader.readAsText(file);
+    }
+</script>
+
+</body>
+</html>
