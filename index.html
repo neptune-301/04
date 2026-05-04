@@ -71,6 +71,8 @@
             display: flex;
             justify-content: space-between;
             align-items: center;
+            flex-wrap: wrap;
+            gap: 10px;
         }
 
         .header-panel h1 { margin: 0; text-shadow: 0 0 5px var(--text-main); }
@@ -113,7 +115,7 @@
         body.light-mode button, body.light-mode select { color: var(--text-dim); border-color: var(--border-color); }
         button:hover { background-color: var(--btn-hover); color: var(--btn-hover-text); box-shadow: var(--glow-effect); }
         button:disabled { opacity: 0.4; cursor: not-allowed; box-shadow: none; }
-        select { margin-bottom: 10px; width: 100%; }
+        select { margin-bottom: 10px; width: 100%; box-sizing: border-box; }
 
         /* 부대 상황 */
         .roster-panel { grid-column: 1 / -1; }
@@ -143,16 +145,38 @@
         .modal-overlay {
             position: fixed; top: 0; left: 0; width: 100%; height: 100%;
             background: rgba(0,0,0,0.8); display: none; justify-content: center; align-items: center; z-index: 1000;
+            padding: 20px; box-sizing: border-box;
         }
         .modal-content {
             background: var(--panel-bg); border: 2px solid var(--accent-blue); border-radius: 8px;
-            padding: 30px; max-width: 800px; width: 90%; max-height: 80vh; overflow-y: auto;
+            padding: 30px; max-width: 800px; width: 100%; max-height: 85vh; overflow-y: auto;
             color: var(--text-main); font-family: 'Malgun Gothic', sans-serif; box-shadow: 0 0 20px var(--accent-blue);
+            box-sizing: border-box;
         }
         .modal-content h2 { color: var(--accent-blue); border-bottom: 1px solid; padding-bottom: 10px; margin-top: 0; }
         .modal-content h3 { color: var(--accent-yellow); margin-top: 20px; }
         .modal-content ul { line-height: 1.6; padding-left: 20px; }
-        .modal-close-btn { margin-top: 20px; width: 100%; background: var(--accent-blue); color: #000; }
+        
+        .skill-table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 0.9em; }
+        .skill-table th, .skill-table td { border: 1px solid var(--border-color); padding: 8px; text-align: left; }
+        .skill-table th { background-color: rgba(57, 255, 20, 0.1); color: var(--accent-yellow); }
+        
+        .modal-close-btn { margin-top: 20px; width: 100%; background: var(--accent-blue); color: #000; font-size: 1.1em; padding: 15px;}
+
+        .btn-group { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+
+        /* 모바일 최적화 (반응형 768px 이하) */
+        @media (max-width: 768px) {
+            .container { grid-template-columns: 1fr; } /* 1단 레이아웃으로 변경 */
+            .header-panel { flex-direction: column; align-items: flex-start; }
+            .btn-group { width: 100%; display: grid; grid-template-columns: 1fr 1fr; }
+            .btn-group button { width: 100%; font-size: 0.85em; padding: 8px; }
+            .log-panel { height: 300px; } /* 모바일에서 로그창 높이 축소 */
+            .right-column { gap: 15px; }
+            .char-grid { grid-template-columns: 1fr; } /* 모바일에서 캐릭터 카드를 세로로 한 줄씩 배치 */
+            .modal-content { padding: 15px; }
+            .skill-table { font-size: 0.75em; } /* 모바일에서 표 글씨 축소 */
+        }
     </style>
 </head>
 <body>
@@ -164,11 +188,12 @@
             <h1>[A-SYNC ALPHA]</h1>
             <p class="sys-info">DAY: <span id="day-counter">1</span> | 요새 체력: <span id="fortress-hp">50</span></p>
         </div>
-        <div style="display: flex; gap: 10px;">
-            <button onclick="toggleTutorial()" style="border-color:var(--accent-yellow); color:var(--accent-yellow)">튜토리얼</button>
+        <div class="btn-group">
+            <button onclick="toggleTutorial()" style="border-color:var(--accent-yellow); color:var(--accent-yellow)">가이드/스킬</button>
             <button onclick="toggleTheme()">테마 전환</button>
             <button onclick="saveGame()">저장</button>
             <button onclick="document.getElementById('loadInput').click()">불러오기</button>
+            <button onclick="resetGame()" style="border-color:var(--accent-red); color:var(--accent-red)">전체 초기화</button>
             <input type="file" id="loadInput" style="display:none" accept=".json" onchange="loadGame(event)">
         </div>
     </div>
@@ -208,23 +233,33 @@
         <h3>1. 하루 일과 (Phase)</h3>
         <ul>
             <li><strong>임무 배정:</strong> 매일 시작 시 생존한 모든 요원을 [전투/탐색/보강] 중 하나에 배정합니다.</li>
-            <li><strong>전투 (Combat):</strong> 게이트에서 무작위로 적들이 등장합니다. 행운 스탯에 따라 턴이 정해지며, 적 전멸/아군 전멸/전원 도주 시 종료됩니다.</li>
-            <li><strong>탐색 (Explore):</strong> 매일 10개의 스팟이 주어집니다. 목표치 판정에 성공하면 랜덤한 소모품(아이템)을 획득합니다. 실패 시 체력을 잃습니다.</li>
+            <li><strong>전투 (Combat):</strong> 무작위 적들이 등장합니다. 행운 스탯으로 턴이 정해지며, 전투가 끝날 때까지 턴이 반복됩니다.</li>
+            <li><strong>탐색 (Explore):</strong> 매일 10개의 스팟이 주어집니다. 목표치 판정에 성공하면 랜덤한 소모품을 얻고, 실패 시 체력을 잃습니다.</li>
             <li><strong>보강 (Fortify):</strong> 매일 주어지는 요새 수리 목표치에 도전합니다. 성공 시 요새 체력이 회복되며 하루가 바로 종료됩니다.</li>
         </ul>
 
-        <h3>2. 스탯 및 상태</h3>
-        <ul>
-            <li><strong>체력 & 기력:</strong> 체력이 0이 되면 행동 불능(임무 배정 불가) 상태가 됩니다. 스킬을 쓸 때는 1D4+2 만큼의 기력을 소모합니다.</li>
-            <li><strong>요새 체력:</strong> 0이 되면 매일 끝날 때마다 전 인원의 체력이 차감되는 페널티가 발생합니다.</li>
-            <li>모든 판정은 <strong>1D6 + 스탯</strong> 다이스 굴림으로 진행됩니다. (자신의 특화 임무가 아닌 곳에 배정되면 행운 판정에 +1 보너스를 받습니다)</li>
-        </ul>
-
-        <h3>3. 스킬 시스템</h3>
-        <ul>
-            <li>스킬 사용 시 제어 판정(목표치 7~9 랜덤)을 통과해야 발동됩니다.</li>
-            <li><strong>주의:</strong> 스킬은 해당 요원의 <strong>[특화 임무]</strong> 페이즈에서만 사용할 수 있습니다. (예: 탐색 특화 요원은 탐색 페이즈에서만 스킬 발동 가능)</li>
-        </ul>
+        <h3>2. 고유 스킬 데이터베이스</h3>
+        <table class="skill-table">
+            <thead>
+                <tr>
+                    <th>스킬명</th>
+                    <th>특화</th>
+                    <th>상세 효과</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr><td>오버차지 필드</td><td>전투</td><td>체력이 1 이상 남은 에너미 전원을 1D3+1턴 동안 「기절」시킨다.</td></tr>
+                <tr><td>플레임 스트라이크</td><td>전투</td><td>적 1체에게 1D6+3 대미지 및 1D3턴 동안 매 턴 1의 「화상」 대미지 적용.</td></tr>
+                <tr><td>절대영도</td><td>전투</td><td>아군 1명에게 「방벽」 효과 적용. (피격 시 2회 동안 대미지 0으로 경감)</td></tr>
+                <tr><td>페이트 오브 스틸</td><td>전투</td><td>적 1체에게 1D4+2 대미지. 목표치 8의 [행운] 판정 성공 시 1D6+2 추가 타격.</td></tr>
+                <tr><td>어둠의 장막</td><td>탐색</td><td>아군 1명 지정. 해당 아군이 진행하는 향후 2번의 탐색 판정을 무조건 성공 처리.</td></tr>
+                <tr><td>폭풍의 도약</td><td>탐색</td><td>아군 1명 지정. 그 날의 탐색 임무 내내 판정 결과값에 +2 보정 적용.</td></tr>
+                <tr><td>메테오 대시</td><td>탐색</td><td>향후 진행될 5개 스팟의 판정 목표치를 즉시 1 하락시킴.</td></tr>
+                <tr><td>정화의 파도</td><td>보강</td><td>아군 1명의 체력 혹은 기력을 선택하여 1D10+2 회복. (최대치 초과 불가)</td></tr>
+                <tr><td>루트 리페어</td><td>보강</td><td>요새 체력을 즉시 1D6+2 수리.</td></tr>
+                <tr><td>맹독의 정수</td><td>보강</td><td>아군 2명 지정. 각 아군은 원하는 스탯 1개를 선택해 그 날 하루 동안 +1 상승(각성).</td></tr>
+            </tbody>
+        </table>
 
         <button class="modal-close-btn" onclick="toggleTutorial()">확인 (닫기)</button>
     </div>
@@ -246,9 +281,17 @@
     }
 
     function toggleTheme() { document.body.classList.toggle('light-mode'); }
+    
     function toggleTutorial() {
         const modal = document.getElementById('tutorial-modal');
         modal.style.display = modal.style.display === 'flex' ? 'none' : 'flex';
+    }
+
+    // 전체 초기화 함수
+    function resetGame() {
+        if(confirm("모든 진행 상황을 초기화하고 게임을 처음부터 다시 시작하시겠습니까?")) {
+            location.reload();
+        }
     }
 
     let state = {
@@ -312,7 +355,7 @@
         }
 
         if (dataLoaded) {
-            toggleTutorial(); // 첫 시작 시 튜토리얼 자동 오픈
+            toggleTutorial(); 
             renderInventory();
             startPhase('assign');
         }
@@ -326,7 +369,6 @@
         return val;
     }
 
-    // 버프 뱃지 렌더러
     function renderBuffs(char) {
         let html = '';
         if(char.buffs.barrier > 0) html += `<span class="buff-badge buff-barrier">방벽 ${char.buffs.barrier}회</span>`;
@@ -386,10 +428,9 @@
     function prepareUseItem(itemName) {
         let div = document.getElementById('item-target-div');
         div.style.display = 'block';
-        let html = `<label>${itemName} 투여:</label><select id="item-target-char" style="width:auto; margin:0 10px; padding:5px;">`;
-        // Req 3: 체력이 0인 요원에게도 아이템 사용 가능
+        let html = `<label>${itemName} 투여:</label><select id="item-target-char" style="width:auto; margin:5px 0; padding:5px; display:block;">`;
         state.chars.forEach(c => html += `<option value="${c.name}">${c.name}</option>`);
-        html += `</select><button onclick="useItem('${itemName}')" style="background:var(--accent-blue); color:#000; padding:5px 15px;">사용</button>`;
+        html += `</select><button onclick="useItem('${itemName}')" style="background:var(--accent-blue); color:#000; padding:5px 15px; width:100%;">사용</button>`;
         div.innerHTML = html;
     }
 
@@ -417,14 +458,13 @@
         updateUI();
 
         if (phase === 'assign') {
-            // Req 5: 하루 시작 시 로그 리셋
             clearLog();
             desc.innerText = `[DAY ${state.day}] 요원 임무 수동 배정`;
             logMsg(`\n========== DAY ${state.day} 시작 ==========`);
             let html = `<div class="action-box">`;
             state.chars.forEach((c, idx) => {
                 if(c.hp > 0) {
-                    c.mission = 'combat'; // Default
+                    c.mission = 'combat'; 
                     html += `<label>${c.name} 배정:</label><select id="assign-${idx}">
                             <option value="combat">전투 임무</option><option value="explore">탐색 임무</option><option value="fortify">보강 임무</option></select>`;
                 }
@@ -494,7 +534,6 @@
             aliveEnemies.forEach(e => { targetHtml += `<option value="${e.name}">${e.name} (HP: ${e.hp})</option>`; });
             targetHtml += `</select>`;
 
-            // Req 1: 특화 임무에서만 스킬 발동 버튼 활성화
             let skillDisabled = entity.ref.spec !== 'combat' ? 'disabled' : '';
             let skillStyle = skillDisabled ? 'border-color:#555; color:#555;' : 'border-color:var(--accent-yellow); color:var(--accent-yellow);';
 
@@ -503,9 +542,9 @@
                     <p style="color:var(--accent-blue); margin-top:0;"><strong>[▶ 요원 ${entity.ref.name}의 턴]</strong></p>
                     <label>대상 선택:</label>${targetHtml}
                     <div class="controls-row">
-                        <button onclick="combatAction('attack')">기본 공격</button>
-                        <button onclick="combatAction('skill')" style="${skillStyle}" ${skillDisabled}>스킬 발동</button>
-                        <button onclick="combatAction('flee')" style="border-color:#555">도주 시도</button>
+                        <button onclick="combatAction('attack')" style="flex:1">기본 공격</button>
+                        <button onclick="combatAction('skill')" style="flex:1; ${skillStyle}" ${skillDisabled}>스킬 발동</button>
+                        <button onclick="combatAction('flee')" style="flex:1; border-color:#555">도주</button>
                     </div>
                 </div>
             `;
@@ -615,8 +654,8 @@
                 <label>판정 스탯 선택:</label>
                 <select id="exp-stat"><option value="atk">공격력 (강행 돌파)</option><option value="ctrl">제어력 (함정 해체)</option><option value="luck">행운 (직감 탐색)</option></select>
                 <div class="controls-row">
-                    <button onclick="doExplore()">탐색 판정 실시</button>
-                    <button id="exp-skill-btn" onclick="prepareSkill(state.chars.filter(c=>c.hp>0&&c.mission==='explore')[document.getElementById('exp-char').value].name, 'explore')">스킬 발동</button>
+                    <button onclick="doExplore()" style="flex:1">탐색 판정</button>
+                    <button id="exp-skill-btn" style="flex:1" onclick="prepareSkill(state.chars.filter(c=>c.hp>0&&c.mission==='explore')[document.getElementById('exp-char').value].name, 'explore')">스킬 발동</button>
                 </div>
                 <button onclick="startPhase('fortify')" style="width:100%; border-color:#555;">탐색 즉시 종료</button>
             </div>
@@ -624,7 +663,6 @@
         updateExploreSkillButton();
     }
 
-    // Req 1: 탐색 스킬 활성화 로직
     function updateExploreSkillButton() {
         let explorers = state.chars.filter(c => c.hp > 0 && c.mission === 'explore');
         let selectedChar = explorers[document.getElementById('exp-char').value];
@@ -686,8 +724,8 @@
                 <label>판정 스탯 선택:</label>
                 <select id="fort-stat"><option value="def">방어력</option><option value="ctrl">제어력</option><option value="luck">행운</option></select>
                 <div class="controls-row">
-                    <button onclick="doFortify(${targetVal})">보강 판정 실시</button>
-                    <button id="fort-skill-btn" onclick="prepareSkill(state.chars.filter(c=>c.hp>0&&c.mission==='fortify')[document.getElementById('fort-char').value].name, 'fortify')">스킬 발동</button>
+                    <button onclick="doFortify(${targetVal})" style="flex:1">보강 판정</button>
+                    <button id="fort-skill-btn" style="flex:1" onclick="prepareSkill(state.chars.filter(c=>c.hp>0&&c.mission==='fortify')[document.getElementById('fort-char').value].name, 'fortify')">스킬 발동</button>
                 </div>
                 <button onclick="endDay()" style="width:100%; border-color:#555;">보강 즉시 종료</button>
             </div>
@@ -695,7 +733,6 @@
         updateFortifySkillButton();
     }
 
-    // Req 1: 보강 스킬 활성화 로직
     function updateFortifySkillButton() {
         let fortifiers = state.chars.filter(c => c.hp > 0 && c.mission === 'fortify');
         let selectedChar = fortifiers[document.getElementById('fort-char').value];
@@ -723,12 +760,10 @@
         updateUI();
     }
 
-    // 스킬 시스템
     function prepareSkill(charName, phase) {
         const char = state.chars.find(c => c.name === charName);
         let html = `<div class="action-box" style="border-color:var(--accent-yellow);"><h4 style="margin:0 0 10px 0; color:var(--accent-yellow);">스킬 타겟: [${char.skill}]</h4>`;
         
-        // Req 3: 죽은 사람에게도 스킬 지정 가능하도록 전체 캐릭터 렌더링
         let allyOpts = ""; state.chars.forEach(c => allyOpts += `<option value="${c.name}">${c.name}</option>`);
         let enemyOpts = ""; state.activeEnemies.filter(e => e.hp > 0).forEach(e => enemyOpts += `<option value="${e.name}">${e.name} (HP:${e.hp})</option>`);
         let statOpts = `<option value="atk">공격</option><option value="def">방어</option><option value="ctrl">제어</option><option value="luck">행운</option>`;
@@ -736,7 +771,6 @@
         if (char.skill === '정화의 파도') {
             html += `<label>대상:</label><select id="sk-tgt1">${allyOpts}</select><br><label>회복:</label><select id="sk-opt1"><option value="hp">체력</option><option value="sp">기력</option></select>`;
         } else if (char.skill === '맹독의 정수') {
-            // Req 4: 2명 지정 시 중복 방지 스크립트 추가
             html += `<label>대상 1:</label><select id="sk-tgt1" onchange="preventDuplicateTarget()">${allyOpts}</select> 스탯: <select id="sk-opt1">${statOpts}</select><br>`;
             html += `<label>대상 2:</label><select id="sk-tgt2" onchange="preventDuplicateTarget()">${allyOpts}</select> 스탯: <select id="sk-opt2">${statOpts}</select>`;
         } else if (['절대영도', '어둠의 장막', '폭풍의 도약'].includes(char.skill)) {
@@ -744,29 +778,23 @@
         } else if (['플레임 스트라이크', '페이트 오브 스틸'].includes(char.skill)) {
             html += `<label>적 대상:</label><select id="sk-tgt1">${enemyOpts}</select>`;
         } else {
-            html += `<p style="font-size:0.9em">시스템 전체 혹은 적 전체 타겟 스킬입니다.</p>`;
+            html += `<p style="font-size:0.9em; margin-bottom:0;">시스템 전체 혹은 적 전체 타겟 스킬입니다.</p>`;
         }
 
         html += `<div class="controls-row" style="margin-top:15px;">
-            <button onclick="executeSkill('${char.name}', '${phase}')" style="background-color:var(--accent-yellow); color:#000;">발동 시작</button>
-            <button onclick="cancelSkill('${phase}')">취소</button>
+            <button onclick="executeSkill('${char.name}', '${phase}')" style="flex:1; background-color:var(--accent-yellow); color:#000;">발동 시작</button>
+            <button onclick="cancelSkill('${phase}')" style="flex:1">취소</button>
         </div></div>`;
         document.getElementById('action-controls').innerHTML = html;
         if(char.skill === '맹독의 정수') preventDuplicateTarget();
     }
 
-    // 중복 선택 방지
     function preventDuplicateTarget() {
         let t1 = document.getElementById('sk-tgt1');
         let t2 = document.getElementById('sk-tgt2');
         if(!t1 || !t2) return;
-        
-        for(let i=0; i<t2.options.length; i++) {
-            t2.options[i].disabled = (t2.options[i].value === t1.value);
-        }
-        for(let i=0; i<t1.options.length; i++) {
-            t1.options[i].disabled = (t1.options[i].value === t2.value);
-        }
+        for(let i=0; i<t2.options.length; i++) t2.options[i].disabled = (t2.options[i].value === t1.value);
+        for(let i=0; i<t1.options.length; i++) t1.options[i].disabled = (t1.options[i].value === t2.value);
     }
 
     function cancelSkill(phase) {
